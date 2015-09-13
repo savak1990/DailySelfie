@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">DailySelfie</string>
 
-    <string name="hello_world">Hello world!</string>
+    <!-- Main Activity actions -->
     <string name="action_settings">Settings</string>
+    <string name="action_take_photo">Take Photo</string>
 </resources>

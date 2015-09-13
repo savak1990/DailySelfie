@@ -6,10 +6,7 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationManagerCompat;
 import android.util.Log;
-import android.widget.Toast;
 
 /**
  * The purpose of this notification alarm is to add notification about
@@ -20,8 +17,6 @@ public class NotificationAlarmReceiver extends BroadcastReceiver {
 
     private static String TAG = "NotificationAlarmReceiver";
 
-    public static int NOTIFICATION_GO_TO_APP_ID = 1;
-
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.i(TAG, "Alarm notification received. Updating notification.");
@@ -31,8 +26,8 @@ public class NotificationAlarmReceiver extends BroadcastReceiver {
                 context, 0, goToAppIntent, PendingIntent.FLAG_ONE_SHOT);
 
         // TODO resources, create custom view
-        NotificationCompat.Builder notificationBuilder
-                = new NotificationCompat.Builder(context)
+        Notification.Builder notificationBuilder
+                = new Notification.Builder(context)
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentTitle("Selfie time")
                 .setContentText("It's time to take selfie")
@@ -41,6 +36,7 @@ public class NotificationAlarmReceiver extends BroadcastReceiver {
 
         NotificationManager notificationMgr = (NotificationManager)
                 context.getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationMgr.notify(NOTIFICATION_GO_TO_APP_ID, notificationBuilder.build());
+        notificationMgr.notify(SelfieListActivity.NOTIFICATION_GO_TO_APP_ID,
+                notificationBuilder.build());
     }
 }
