@@ -4,33 +4,19 @@ import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.media.ThumbnailUtils;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
-import android.os.Bundle;
 import android.provider.MediaStore;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.ImageView;
-import android.widget.ListView;
-import android.widget.TextView;
 
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.Locale;
 
@@ -64,18 +50,16 @@ public class SelfieListActivity extends Activity {
 
     private String mCurrentPhotoName;
 
-    private ListView mSelfieListView;
-    private SelfieViewArrayAdapter mSelfieListAdapter;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         Log.i(TAG, "Creating activity...");
+
         setContentView(R.layout.activity_selfie_list);
-        setSelfieList();
         setNotificationAlarm();
-        Log.i(TAG, "Created.");
+
+        Log.i(TAG, "Activity created.");
     }
 
     @Override
@@ -92,9 +76,11 @@ public class SelfieListActivity extends Activity {
 
         switch (id) {
             case R.id.action_take_photo:
+                Log.i(TAG, "Take photo action clicked");
                 startPhotoCapture();
                 return true;
             case R.id.action_settings:
+                Log.i(TAG, "Settings action clicked");
                 return true;
         }
 
@@ -105,23 +91,21 @@ public class SelfieListActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_IMAGE_CAPTURE) {
 
+            Log.i(TAG, "Take photo activity returned with code " + resultCode);
+
             if (resultCode == RESULT_OK) {
-                // Add picture to gallery application
-                galleryAddPic();
 
-                // Hide notification about making selfie
-                NotificationManager notifyMgr =
-                        (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                notifyMgr.cancel(NOTIFICATION_GO_TO_APP_ID);
-                Log.i(TAG, "Take photo notification cancelled");
+                addImageToGallery();
 
-                // Reset alarm
+                hideTakeSelfieNotification();
+
                 setNotificationAlarm();
 
                 // Add new image to list view
-                mSelfieListAdapter.insert(
-                        new File(mPublicSelfiePath, mCurrentPhotoName), 0);
-                mCurrentPhotoName = null;
+                SelfieListFragment selfieListFragment = (SelfieListFragment)
+                        getFragmentManager().findFragmentById(R.id.selfieListFragment);
+                selfieListFragment.addSelfie(
+                        new File(mPublicSelfiePath, mCurrentPhotoName));
             } else {
 
                 // Remove temporary file
@@ -134,6 +118,10 @@ public class SelfieListActivity extends Activity {
                 mCurrentPhotoName = null;
             }
         }
+    }
+
+    public File getPublicSelfiePath() {
+        return mPublicSelfiePath;
     }
 
     private void startPhotoCapture() {
@@ -156,9 +144,9 @@ public class SelfieListActivity extends Activity {
                         MediaStore.EXTRA_OUTPUT, Uri.fromFile(photoFile));
                 startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
 
-                Log.i(TAG, "Successfully start take photo activity");
+                Log.i(TAG, "Successfully start image capture activity");
             } else {
-                Log.e(TAG, "Failed to start take photo activity");
+                Log.e(TAG, "Failed to start image capture activity");
             }
         }
     }
@@ -186,16 +174,18 @@ public class SelfieListActivity extends Activity {
         return image;
     }
 
-    private void galleryAddPic() {
+    private void addImageToGallery() {
+        Log.i(TAG, "Adding new image to gallery app...");
+
         Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
         File f = new File(mPublicSelfiePath, mCurrentPhotoName);
         Uri contentUri = Uri.fromFile(f);
         mediaScanIntent.setData(contentUri);
-        Log.i(TAG, "Sending ACTION_MEDIA_SCANNER_SCAN_FILE");
         sendBroadcast(mediaScanIntent);
     }
 
     private void setNotificationAlarm() {
+        Log.i(TAG, "(Re)Starting notification alarm");
 
         Intent notificationIntent = new Intent(
                 getApplicationContext(), NotificationAlarmReceiver.class);
@@ -211,133 +201,14 @@ public class SelfieListActivity extends Activity {
                 SystemClock.elapsedRealtime() + TWO_MINUTES,
                 TWO_MINUTES,
                 pendingNotificationIntent);
-
-        Log.i(TAG, "Notification alarm has been set");
     }
 
-    private boolean setSelfieList() {
-        mSelfieListView = (ListView) findViewById(R.id.selfieListView);
-        mSelfieListAdapter = new SelfieViewArrayAdapter(this);
-        mSelfieListView.setAdapter(mSelfieListAdapter);
+    private void hideTakeSelfieNotification() {
+        Log.i(TAG, "Hiding take photo notification...");
 
-        File[] fileList = mPublicSelfiePath.listFiles();
-        if (fileList == null) return false;
-
-        // Sort values by date modified
-        Arrays.sort(fileList, new Comparator<File>() {
-            @Override
-            public int compare(File lhs, File rhs) {
-                return (int) (rhs.lastModified() - lhs.lastModified());
-            }
-        });
-
-        // Prepare and set list adapter
-        mSelfieListAdapter.attachFileList(fileList);
-        return true;
+        NotificationManager notifyMgr =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        notifyMgr.cancel(NOTIFICATION_GO_TO_APP_ID);
     }
 
-    private static class SelfieViewArrayAdapter extends ArrayAdapter<File> {
-
-        private final Activity mActivity;
-
-        private ArrayList<Bitmap> mSelfieBitmaps = new ArrayList<>();
-        private ArrayList<String> mSelfieDates = new ArrayList<>();
-
-        private SelfieViewArrayAdapter(Activity activity) {
-            super(activity, R.layout.selfie_view);
-            mActivity = activity;
-        }
-
-        private void attachFileList(File[] files) {
-            initSelfiesInfo(files);
-            notifyDataSetChanged();
-        }
-
-        @Override
-        public void add(File imageFile) {
-            mSelfieDates.add(getImageDate(imageFile));
-            mSelfieBitmaps.add(getScaledBitmap(imageFile));
-            notifyDataSetChanged();
-        }
-
-        @Override
-        public void insert(File imageFile, int index) {
-            Log.i(TAG, "Inserting new photo");
-            mSelfieDates.add(index, getImageDate(imageFile));
-            mSelfieBitmaps.add(index, getScaledBitmap(imageFile));
-            notifyDataSetChanged();
-        }
-
-        @Override
-        public int getCount() {
-            return mSelfieDates.size();
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            View rowView = convertView;
-
-            // Reuse views
-            if (rowView == null) {
-                LayoutInflater inflater = mActivity.getLayoutInflater();
-                rowView = inflater.inflate(R.layout.selfie_view, null);
-
-                // configure view holder
-                ViewHolder viewHolder = new ViewHolder();
-                viewHolder.text = (TextView) rowView.findViewById(R.id.selfieTextView);
-                viewHolder.image = (ImageView) rowView.findViewById(R.id.selfieImageView);
-                rowView.setTag(viewHolder);
-            }
-
-            // Fill data
-            ViewHolder holder = (ViewHolder) rowView.getTag();
-            String strSelfieDate = mSelfieDates.get(position);
-            Bitmap selfieBitmap = mSelfieBitmaps.get(position);
-
-            holder.text.setText(strSelfieDate);
-            holder.image.setImageBitmap(selfieBitmap);
-
-            return rowView;
-        }
-
-        private void initSelfiesInfo(File[] files) {
-            for (int i = 0; i < files.length; ++i) {
-
-                // Remove file if it was temporary file
-                if (files[i].length() <= 0) {
-                    if (files[i].delete()) {
-                        Log.i(TAG, "Removed forgotten temporary file");
-                    } else {
-                        Log.e(TAG, "Unable to remove forgotten temporary file");
-                    }
-                    continue;
-                }
-
-                mSelfieBitmaps.add(getScaledBitmap(files[i]));
-                mSelfieDates.add(getImageDate(files[i]));
-            }
-        }
-
-        private Bitmap getScaledBitmap(File imageFile) {
-            // TODO
-            // 1) Probably need to be done in the other thread
-            // 2) Look how to scale image taking scale factor into accout
-            // 3) We don't need to hardcode image size
-            Bitmap selfieBitmap = BitmapFactory.decodeFile(
-                    imageFile.getAbsolutePath());
-            return ThumbnailUtils.extractThumbnail(selfieBitmap, 100, 100);
-        }
-
-        private String getImageDate(File imageFile) {
-            Date date = new Date(imageFile.lastModified());
-            SimpleDateFormat selfieDateFormat =
-                    new SimpleDateFormat("yyyy/MM/dd - hh:mm:ss", Locale.US);
-            return selfieDateFormat.format(date);
-        }
-
-        private static class ViewHolder {
-            private TextView text;
-            private ImageView image;
-        }
-    }
 }
