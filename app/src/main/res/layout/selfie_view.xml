@@ -1,19 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/selfie_grid_cell_width"
+    android:layout_height="@dimen/selfie_grid_cell_height"
+    android:gravity="center"
+    android:padding="@dimen/selfie_grid_cell_padding">
 
     <ImageView
         android:layout_width="@dimen/selfie_image_width"
         android:layout_height="@dimen/selfie_image_height"
-        android:id="@+id/selfieImageView" />
+        android:id="@+id/selfieImageView"
+        android:layout_centerHorizontal="true"
+        android:layout_alignParentTop="true" />
 
     <TextView
-        android:layout_width="@dimen/selfie_image_width"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceLarge"
-        android:text="Small Text"
         android:id="@+id/selfieTextView"
-        android:maxLines="2" />
-</LinearLayout>
+        android:maxLines="2"
+        android:layout_below="@+id/selfieImageView"
+        android:layout_centerHorizontal="true" />
+
+    <CheckBox
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/selectedItemCheckBox"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:focusable="false"
+        android:focusableInTouchMode="false" />
+
+
+</RelativeLayout>

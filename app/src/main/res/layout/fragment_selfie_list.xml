@@ -7,5 +7,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:id="@+id/selfieGridView"
-        android:numColumns="auto_fit" />
+        android:numColumns="@integer/selfie_grid_cells"
+        android:clickable="true"
+        android:descendantFocusability="beforeDescendants" />
 </LinearLayout>

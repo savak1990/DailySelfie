@@ -1,18 +1,15 @@
 package com.example.vklyovan.dailyselfie;
 
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,24 +28,19 @@ import java.util.Locale;
  * Also this activity should start the alarm, that will display notification
  * in notification bar about necessity to make new selfie every two minutes
  */
-public class SelfieListActivity extends Activity {
+public class SelfieListActivity extends Activity
+        implements SelfieListFragment.OnSelfieListFragmentListener {
 
     private static String TAG = "SelfieListActivity";
-
-    private static String SELFIES_FOLDER_NAME = "Selfies";
 
     private static int REQUEST_IMAGE_CAPTURE = 1;
 
     public static int NOTIFICATION_GO_TO_APP_ID = 10;
-    public static int NOTIFICATION_ALARM_ID = 100;
 
-    private static int TWO_MINUTES = 15 * 1000; //TODO 2*60*1000;
+    private SelfieListFragment mSelfieListFragment;
+    private SelfieViewFragment mSelfieViewFragment;
 
-    private File mPublicSelfiePath = new File(
-            Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DCIM), SELFIES_FOLDER_NAME);
-
-    private String mCurrentPhotoName;
+    private File mCurrentPhotoPath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +49,22 @@ public class SelfieListActivity extends Activity {
         Log.i(TAG, "Creating activity...");
 
         setContentView(R.layout.activity_selfie_list);
-        setNotificationAlarm();
+
+
+        mSelfieListFragment = (SelfieListFragment) getFragmentManager().findFragmentByTag(
+                SelfieListFragment.TAG);
+
+        // Create selfie list fragment
+        if (mSelfieListFragment == null) {
+            mSelfieListFragment = new SelfieListFragment();
+
+            getFragmentManager()
+                    .beginTransaction()
+                    .add(R.id.fragment_container, mSelfieListFragment, SelfieListFragment.TAG)
+                    .commit();
+        }
+
+        Util.startNotificationAlarm(getApplicationContext());
 
         Log.i(TAG, "Activity created.");
     }
@@ -79,9 +86,24 @@ public class SelfieListActivity extends Activity {
                 Log.i(TAG, "Take photo action clicked");
                 startPhotoCapture();
                 return true;
-            case R.id.action_settings:
-                Log.i(TAG, "Settings action clicked");
+            case R.id.action_select_all:
+                Log.i(TAG, "Select all action clicked");
+                boolean isSelect = item.getTitle() ==
+                        getResources().getString(R.string.action_select_all);
+                mSelfieListFragment.onSelectAll(isSelect);
+                if (isSelect) {
+                    item.setTitle(getResources().getString(R.string.action_deselect_all));
+                } else {
+                    item.setTitle(getResources().getString(R.string.action_select_all));
+                }
                 return true;
+            case R.id.action_remove_selected:
+                Log.i(TAG, "Remove all action clicked");
+                maybePopBackStack();
+                mSelfieListFragment.onRemoveSelected();
+                return true;
+            default:
+                Log.e(TAG, "Unsupported action clicked");
         }
 
         return super.onOptionsItemSelected(item);
@@ -89,39 +111,68 @@ public class SelfieListActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+        maybePopBackStack();
+
         if (requestCode == REQUEST_IMAGE_CAPTURE) {
 
             Log.i(TAG, "Take photo activity returned with code " + resultCode);
 
             if (resultCode == RESULT_OK) {
 
-                addImageToGallery();
-
-                hideTakeSelfieNotification();
-
-                setNotificationAlarm();
-
                 // Add new image to list view
-                SelfieListFragment selfieListFragment = (SelfieListFragment)
-                        getFragmentManager().findFragmentById(R.id.selfieListFragment);
-                selfieListFragment.addSelfie(
-                        new File(mPublicSelfiePath, mCurrentPhotoName));
+                if (StorageUtil.getSelfiePath() != null && mCurrentPhotoPath != null) {
+
+                    addImageToGallery();
+
+                    hideTakeSelfieNotification();
+
+                    Util.startNotificationAlarm(getApplicationContext());
+
+                    mSelfieListFragment.addSelfie(mCurrentPhotoPath);
+                } else {
+                    Log.e(TAG, "Result was RESULT_OK, but file was not saved in storage.");
+
+                    Toast.makeText(getApplicationContext(),
+                            "Image cannot be saved.", Toast.LENGTH_LONG).show();
+                }
+
             } else {
 
                 // Remove temporary file
-                File temp = new File(mPublicSelfiePath, mCurrentPhotoName);
-                if (temp.delete()) {
-                    Log.i(TAG, "Temporary file successfully removed");
+                if (StorageUtil.getSelfiePath() != null
+                        && mCurrentPhotoPath != null
+                        && mCurrentPhotoPath.exists()) {
+                    if (mCurrentPhotoPath.delete()) {
+                        Log.i(TAG, "Temporary file successfully removed");
+                    } else {
+                        Log.e(TAG, "Temporary file failed to remove");
+                    }
                 } else {
-                    Log.e(TAG, "Temporary file failed to remove");
+                    Log.e(TAG, "Unable to remove temporary file");
                 }
-                mCurrentPhotoName = null;
+                mCurrentPhotoPath = null;
             }
         }
     }
 
-    public File getPublicSelfiePath() {
-        return mPublicSelfiePath;
+    @Override
+    public void onSelfieItemClicked(File selfieFile) {
+
+        Log.i(TAG, "Starting selfie view activity for " + selfieFile.getAbsolutePath());
+
+        mSelfieViewFragment = SelfieViewFragment.newInstance(selfieFile);
+        getFragmentManager()
+                .beginTransaction()
+                .replace(R.id.fragment_container, mSelfieViewFragment, SelfieViewFragment.TAG)
+                .addToBackStack(null)
+                .commit();
+    }
+
+    private void maybePopBackStack() {
+        if (mSelfieViewFragment != null && mSelfieViewFragment.isVisible()) {
+            getFragmentManager().popBackStackImmediate();
+        }
     }
 
     private void startPhotoCapture() {
@@ -142,6 +193,7 @@ public class SelfieListActivity extends Activity {
             if (photoFile != null) {
                 takePictureIntent.putExtra(
                         MediaStore.EXTRA_OUTPUT, Uri.fromFile(photoFile));
+                takePictureIntent.putExtra("android.intent.extras.CAMERA_FACING", 1);
                 startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
 
                 Log.i(TAG, "Successfully start image capture activity");
@@ -156,51 +208,30 @@ public class SelfieListActivity extends Activity {
                 "yyyyMMdd_HHmmss", Locale.US).format(new Date());
         String imageFileName = "SELFIE_" + timeStamp;
 
-        if (!mPublicSelfiePath.exists()) {
-            if (mPublicSelfiePath.mkdir()) {
-                Log.i(TAG, "Public storage directory successfully created");
-            } else {
-                Log.e(TAG, "Public storage directory failed to create");
-            }
+        mCurrentPhotoPath = null;
+        if (StorageUtil.getSelfiePath() != null) {
+            mCurrentPhotoPath = File.createTempFile(
+                    imageFileName,
+                    ".jpg",
+                    StorageUtil.getSelfiePath());
+        } else {
+            Log.e(TAG, "Temporary file was not created due to null selfie path");
         }
 
-        File image = File.createTempFile(
-                imageFileName,
-                ".jpg",
-                mPublicSelfiePath);
-
-        mCurrentPhotoName = image.getName();
-
-        return image;
+        return mCurrentPhotoPath;
     }
 
     private void addImageToGallery() {
-        Log.i(TAG, "Adding new image to gallery app...");
 
-        Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-        File f = new File(mPublicSelfiePath, mCurrentPhotoName);
-        Uri contentUri = Uri.fromFile(f);
-        mediaScanIntent.setData(contentUri);
-        sendBroadcast(mediaScanIntent);
-    }
-
-    private void setNotificationAlarm() {
-        Log.i(TAG, "(Re)Starting notification alarm");
-
-        Intent notificationIntent = new Intent(
-                getApplicationContext(), NotificationAlarmReceiver.class);
-
-        PendingIntent pendingNotificationIntent = PendingIntent.getBroadcast(
-                getApplicationContext(),
-                NOTIFICATION_ALARM_ID,
-                notificationIntent, 0);
-
-        AlarmManager alarmMgr = (AlarmManager) getSystemService(ALARM_SERVICE);
-        alarmMgr.setRepeating(
-                AlarmManager.ELAPSED_REALTIME,
-                SystemClock.elapsedRealtime() + TWO_MINUTES,
-                TWO_MINUTES,
-                pendingNotificationIntent);
+        if (mCurrentPhotoPath != null) {
+            Log.i(TAG, "Adding new image to gallery app...");
+            Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+            Uri contentUri = Uri.fromFile(mCurrentPhotoPath);
+            mediaScanIntent.setData(contentUri);
+            sendBroadcast(mediaScanIntent);
+        } else {
+            Log.e(TAG, "Adding to gallery broadcast was not send. Current photo path is null");
+        }
     }
 
     private void hideTakeSelfieNotification() {
@@ -210,5 +241,4 @@ public class SelfieListActivity extends Activity {
                 (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         notifyMgr.cancel(NOTIFICATION_GO_TO_APP_ID);
     }
-
 }
